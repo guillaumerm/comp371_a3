@@ -14,6 +14,8 @@
 #include "Light.h"
 #include "OBJloader.h"  //include the object loadr
 #include "shaderloader.h"
+#define STB_IMAGE_IMPLEMENTATION
+#include "stbi_image.h"
 using namespace std;
 
 // Window dimensions
@@ -21,6 +23,8 @@ const GLuint WIDTH = 800, HEIGHT = 800;
 GLFWwindow *window;
 
 Camera camera = Camera();
+bool isPartB = false;
+GLuint planeVAO;
 
 vector<Light> lightsPartA = {
 	Light(glm::vec3(0.2f, 0.05f, 0.05f), glm::vec3(10.0f, 15.0f, 5.0f)), 
@@ -28,9 +32,6 @@ vector<Light> lightsPartA = {
 	Light(glm::vec3(0.05f, 0.05f, 0.2f), glm::vec3(0.0f, 15.0f, 5.0f)),
 	Light(glm::vec3(0.05f, 0.05f, 0.05f), glm::vec3(0.0f, 0.0f, 25.0f))
 };
-
-bool normalAsObjectColor = false;
-bool gouraudActive = false;
 
 // 
 //Struct that contains all variables and behaviors related to the object
@@ -168,16 +169,10 @@ static void key_callback(GLFWwindow* window, int key, int scancode, int action, 
 		}
 	}
 	else if (key == GLFW_KEY_F1) {
-		for(int i = 0; i < lightsPartA.size(); i++) {
-			if(!lightsPartA[i].isActive())
-				lightsPartA[i].toggle();
-		}
+		isPartB = false;
 	}
 	else if (key == GLFW_KEY_F2) {
-		for(int i = 0; i < lightsPartA.size(); i++) {
-			if(!lightsPartA[i].isActive())
-				lightsPartA[i].toggle();
-		}
+		isPartB = true;
 	}
 }
 
@@ -222,6 +217,83 @@ int init() {
 	}
 	return 0;
 }
+
+void renderScene(GLuint activeShader, GLuint activeVAO, int numberOfEdges) {
+	// floor
+    glm::mat4 model = glm::mat4(1.0f);
+    glUniformMatrix4fv(glGetUniformLocation(activeShader, "model"), 1, GL_FALSE, glm::value_ptr(model));
+    glBindVertexArray(planeVAO);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+	
+	//Building a perspective view
+ 	model = glm::mat4(1.0f);
+	glm::mat4 view = glm::mat4(1.0f);
+	glm::mat4 projection = glm::mat4(1.0f);
+
+	// Constructing the ctm (camera transformation matrix)
+		
+	model = glm::scale(model, object.scale);
+	// Construct the model_rotation matrix
+	glm::mat4 model_rotation = glm::rotate(glm::mat4(1.0f), glm::radians(object.roll), glm::vec3(0,0,1))*glm::rotate(glm::mat4(1.0f), glm::radians(object.yaw), glm::vec3(0, 1, 0))* glm::rotate(glm::mat4(1.0f), glm::radians(object.pitch), glm::vec3(1,0,0));
+	model *= model_rotation;
+	model = glm::translate(model, object.position);
+
+	view = glm::lookAt(camera.getPosition(), camera.getFront() + camera.getPosition(), camera.getUp());
+
+	projection = glm::perspective(glm::radians(camera.getFov()), (float)WIDTH / (float)HEIGHT, 0.1f, 100.0f);
+
+	//Passing the ctm (camera transformation matrix) to the shaders
+	glUniformMatrix4fv(glGetUniformLocation(activeShader, "model"), 1, GL_FALSE, glm::value_ptr(model));
+	glUniformMatrix4fv(glGetUniformLocation(activeShader, "view"), 1, GL_FALSE, glm::value_ptr(view));
+	glUniformMatrix4fv(glGetUniformLocation(activeShader, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
+		
+	// Change lighting depending on the camera position
+	glUniform3fv(glGetUniformLocation(activeShader, "viewPosition"), 1, glm::value_ptr(camera.getPosition()));
+		
+	glBindVertexArray(activeVAO);
+	glDrawElements(GL_TRIANGLES, numberOfEdges, GL_UNSIGNED_INT, 0);
+	glBindVertexArray(0);
+}
+
+// utility function for loading a 2D texture from file
+// ---------------------------------------------------
+unsigned int loadTexture(char const * path)
+{
+    unsigned int textureID;
+    glGenTextures(1, &textureID);
+
+    int width, height, nrComponents;
+    unsigned char *data = stbi_load(path, &width, &height, &nrComponents, 0);
+    if (data)
+    {
+        GLenum format;
+        if (nrComponents == 1)
+            format = GL_RED;
+        else if (nrComponents == 3)
+            format = GL_RGB;
+        else if (nrComponents == 4)
+            format = GL_RGBA;
+
+        glBindTexture(GL_TEXTURE_2D, textureID);
+        glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+        glGenerateMipmap(GL_TEXTURE_2D);
+
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, format == GL_RGBA ? GL_CLAMP_TO_EDGE : GL_REPEAT); // for this tutorial: use GL_CLAMP_TO_EDGE to prevent semi-transparent borders. Due to interpolation it takes texels from next repeat 
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, format == GL_RGBA ? GL_CLAMP_TO_EDGE : GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+        stbi_image_free(data);
+    }
+    else
+    {
+        std::cout << "Texture failed to load at path: " << path << std::endl;
+        stbi_image_free(data);
+    }
+
+    return textureID;
+}
+
 // The MAIN function, from here we start the application and run the game loop
 int main()
 {
@@ -240,6 +312,31 @@ int main()
 		return -1;
 	}
 
+	float planeVertices[] = {
+        // positions            // normals         // texcoords
+         25.0f, -0.5f,  25.0f,  0.0f, 1.0f, 0.0f,  25.0f,  0.0f,
+        -25.0f, -0.5f,  25.0f,  0.0f, 1.0f, 0.0f,   0.0f,  0.0f,
+        -25.0f, -0.5f, -25.0f,  0.0f, 1.0f, 0.0f,   0.0f, 25.0f,
+
+         25.0f, -0.5f,  25.0f,  0.0f, 1.0f, 0.0f,  25.0f,  0.0f,
+        -25.0f, -0.5f, -25.0f,  0.0f, 1.0f, 0.0f,   0.0f, 25.0f,
+         25.0f, -0.5f, -25.0f,  0.0f, 1.0f, 0.0f,  25.0f, 25.0f
+    };
+    // plane VAO
+    unsigned int planeVBO;
+    glGenVertexArrays(1, &planeVAO);
+    glGenBuffers(1, &planeVBO);
+    glBindVertexArray(planeVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, planeVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(planeVertices), planeVertices, GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
+    glBindVertexArray(0);
+
 	// Build and compile our shader program
 	// Vertex shader
 
@@ -251,9 +348,6 @@ int main()
 	std::vector<glm::vec2> UVs;
 
 	loadOBJ("./objects/heracles.obj", indices, vertices, normals, UVs); //read the vertices from the cat.obj file
-
-	std::cout << indices.size() << std::endl;
-	std::cout << normals.size() << std::endl;
 
 	GLuint VAO;
 	glGenVertexArrays(1, &VAO);
@@ -273,6 +367,13 @@ int main()
 	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, 0);
 	glEnableVertexAttribArray(1);
 
+	GLuint texture;
+	glGenBuffers(1, &texture);
+	glBindBuffer(GL_ARRAY_BUFFER, texture);
+	glBufferData(GL_ARRAY_BUFFER, UVs.size() * sizeof(glm::vec2), &UVs.front(), GL_STATIC_DRAW);
+	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (GLvoid*)(6 * sizeof(GLfloat)));
+	glEnableVertexAttribArray(2);
+
 	GLuint EBO;
 	glGenBuffers(1, &EBO);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
@@ -281,8 +382,6 @@ int main()
 	glBindVertexArray(0);
 
 	// Passing the ambient, diffuse and specular coefficients
-
-	// For Phong
 	glUniform1f(glGetUniformLocation(shader, "ambientCoefficient"), 0.25f);
 	glUniform1f(glGetUniformLocation(shader, "diffuseCoefficient"), 0.75f);
 	glUniform1f(glGetUniformLocation(shader, "specularCoefficient"), 1.0f);
@@ -292,9 +391,50 @@ int main()
 	for(int i = 0; i < lightsPartA.size(); i++) {
 		glUniform3fv(glGetUniformLocation(shader, ("lightsPartA["  + to_string(i) + "].position").c_str()), 1, glm::value_ptr(lightsPartA[i].getPosition()));
 		glUniform3fv(glGetUniformLocation(shader, ("lightsPartA["  + to_string(i) + "].color").c_str()), 1, glm::value_ptr(lightsPartA[i].getColor()));
-		glUniform1i(glGetUniformLocation(shader, ("lightsPartA["  + to_string(i) + "].isActive").c_str()), lightsPartA[i].isActive());
 	}
 
+	GLuint shadowShader = loadSHADER("./shaders/shadowVertex.shader", "./shaders/shadowFragment.shader");
+	glUseProgram(shadowShader);
+	// Passing light for part B
+    glUniform3fv(glGetUniformLocation(shadowShader, "lightPosition"), 1, glm::value_ptr(glm::vec3(0.0f, 20.0f, 10.0f)));
+    glUniform3fv(glGetUniformLocation(shadowShader, "lightColor"), 1, glm::value_ptr(glm::vec3(0.8f, 0.2f, 0.2f)));
+	cout << glGetUniformLocation(shadowShader, "lightColor") << endl;
+	cout << glGetUniformLocation(shader, "lightColor") << endl;
+	// Passing the ambient, diffuse and specular coefficients
+	glUniform1f(glGetUniformLocation(shadowShader, "ambientCoefficient"), 0.25f);
+	glUniform1f(glGetUniformLocation(shadowShader, "diffuseCoefficient"), 0.75f);
+	glUniform1f(glGetUniformLocation(shadowShader, "specularCoefficient"), 1.0f);
+
+  	GLuint shadowMapFBO;
+    glGenFramebuffers(1, &shadowMapFBO);
+
+    GLuint shadowMapTex;
+    glGenTextures(1, &shadowMapTex);
+    glBindTexture(GL_TEXTURE_2D, shadowMapTex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT,
+             WIDTH, HEIGHT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, shadowMapFBO);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, shadowMapTex, 0);
+    glDrawBuffer(GL_NONE);
+    glReadBuffer(GL_NONE);
+
+	GLenum Status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+
+	if (Status != GL_FRAMEBUFFER_COMPLETE) {
+		printf("FB error, status: 0x%x\n", Status);
+		return false;
+	}
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glUseProgram(0);
+	GLuint depthShader = loadSHADER("./shaders/depthVertex.shader", "./shaders/depthFragment.shader");
+
+	unsigned int marbleTexture = loadTexture("./textures/marble.jpg");
 	// Game loop
 	while (!glfwWindowShouldClose(window))
 	{
@@ -303,45 +443,41 @@ int main()
 
 		// Render
 		// Clear the colorbuffer and depth buffer
-		glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+		glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 		glClear(GL_DEPTH_BUFFER_BIT|GL_COLOR_BUFFER_BIT);
-
-		glUseProgram(shader);
-
-		//Building a perspective view
-		glm::mat4 model = glm::mat4(1.0f);
-		glm::mat4 view = glm::mat4(1.0f);
-		glm::mat4 projection = glm::mat4(1.0f);
-
-		// Constructing the ctm (camera transformation matrix)
 		
-		model = glm::scale(model, object.scale);
-		// Construct the model_rotation matrix
-		glm::mat4 model_rotation = glm::rotate(glm::mat4(1.0f), glm::radians(object.roll), glm::vec3(0,0,1))*glm::rotate(glm::mat4(1.0f), glm::radians(object.yaw), glm::vec3(0, 1, 0))* glm::rotate(glm::mat4(1.0f), glm::radians(object.pitch), glm::vec3(1,0,0));
-		model *= model_rotation;
-		model = glm::translate(model, object.position);
-
-		view = glm::lookAt(camera.getPosition(), camera.getFront() + camera.getPosition(), camera.getUp());
-
-		projection = glm::perspective(glm::radians(camera.getFov()), (float)WIDTH / (float)HEIGHT, 0.1f, 100.0f);
-
-		//Passing the ctm (camera transformation matrix) to the shaders
-		glUniformMatrix4fv(glGetUniformLocation(shader, "model"), 1, GL_FALSE, glm::value_ptr(model));
-		glUniformMatrix4fv(glGetUniformLocation(shader, "view"), 1, GL_FALSE, glm::value_ptr(view));
-		glUniformMatrix4fv(glGetUniformLocation(shader, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
-		
-		// Change lighting depending on the camera position
-		glUniform3fv(glGetUniformLocation(shader, "viewPosition"), 1, glm::value_ptr(camera.getPosition()));
-
-		//Set the lights state
-		for(int i = 0; i < lightsPartA.size(); i++) {
-			glUniform1i(glGetUniformLocation(shader, ("lightsPartA[" + to_string(i) + "].isActive").c_str()), lightsPartA[i].isActive());
+		if(isPartB){
+			// Configure camera from light source location
+			glm::mat4 lightProjection = glm::perspective(glm::radians(45.0f), (float)WIDTH/ (float)HEIGHT, 1.0f, 20.0f);
+			//glm::mat4 lightProjection = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, 1.0f, 7.5f);
+			glm::mat4 lightView = glm::lookAt(glm::vec3(0.0, 20.0, 10.0), glm::vec3(0,0,0), glm::vec3(0.0f, 1.0f, 0.0f));
+			glm::mat4 lightMatrix = lightProjection * lightView;
+			// First Pass
+			glUseProgram(depthShader);
+			// Passing light for part B
+			//glUniform1f(glGetUniformLocation(depthShader, "near_plane"), 1.0f);
+			//glUniform1f(glGetUniformLocation(depthShader, "far_plane"), 20.0f);
+			glUniformMatrix4fv(glGetUniformLocation(depthShader, "lightSpaceMatrix"), 1, GL_FALSE, glm::value_ptr(lightMatrix));
+			glBindFramebuffer(GL_DRAW_FRAMEBUFFER, shadowMapFBO);
+    		glClear(GL_DEPTH_BUFFER_BIT);
+			glActiveTexture(GL_TEXTURE0);
+			glBindTexture(GL_TEXTURE_2D, marbleTexture);
+			renderScene(depthShader, VAO, indices.size());
+			glBindFramebuffer(GL_FRAMEBUFFER, 0);
+			// Second Pass
+			glClear(GL_DEPTH_BUFFER_BIT|GL_COLOR_BUFFER_BIT);
+			glUseProgram(shadowShader);
+			glUniformMatrix4fv(glGetUniformLocation(shadowShader, "lightSpaceMatrix"), 1, GL_FALSE, glm::value_ptr(lightMatrix));
+			glActiveTexture(GL_TEXTURE0);
+			glBindTexture(GL_TEXTURE_2D, marbleTexture);
+			glActiveTexture(GL_TEXTURE1);
+			glBindTexture(GL_TEXTURE_2D, shadowMapTex);
+			renderScene(shadowShader, VAO, indices.size());
+			glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		} else {
+			glUseProgram(shader);
+			renderScene(shader, VAO, indices.size());
 		}
-		
-		glBindVertexArray(VAO);
-		//glDrawArrays(GL_TRIANGLES, 0, vertices.size());
-		glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0);
-		glBindVertexArray(0);
 
 		// Swap the screen buffers
 		glfwSwapBuffers(window);

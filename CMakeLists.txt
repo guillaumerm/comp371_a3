@@ -17,6 +17,7 @@ add_executable(COMP371_A3 ${cpps} ${headers})
 
 FILE(COPY shaders DESTINATION "${CMAKE_BINARY_DIR}")
 FILE(COPY objects DESTINATION "${CMAKE_BINARY_DIR}")
+FILE(COPY textures DESTINATION "${CMAKE_BINARY_DIR}")
 
 target_link_libraries(${PROJECT_NAME} glfw glm glew ${OPENGL_LIBRARIES})
 

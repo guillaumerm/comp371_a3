@@ -5,7 +5,6 @@ out vec4 color;
 struct Light {
     vec3 position;
     vec3 color;
-    int isActive;
 };
 
 uniform Light lightsPartA[4];
@@ -42,8 +41,7 @@ void main()
     vec3 result;
     
     for(int i = 0; i < lightsPartA.length(); i++) {
-        if(lightsPartA[i].isActive == 1) 
-            result += calculateColor(lightsPartA[i]);
+        result += calculateColor(lightsPartA[i]);
     }
 
     color = vec4(result * objectColor, 1.0f);
