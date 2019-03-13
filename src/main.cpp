@@ -327,24 +327,7 @@ void renderQuad()
     glBindVertexArray(0);
 }
 
-// The MAIN function, from here we start the application and run the game loop
-int main()
-{
-	if (init() != 0)
-		return EXIT_FAILURE;
-	// Set the required callback functions
-	glfwSetKeyCallback(window, key_callback);
-	glfwSetMouseButtonCallback(window, mouse_button_callback);
-
-	// Set this to true so GLEW knows to use a modern approach to retrieving function pointers and extensions
-	glewExperimental = GL_TRUE;
-	// Initialize GLEW to setup the OpenGL Function pointers
-	if (glewInit() != GLEW_OK)
-	{
-		std::cout << "Failed to initialize GLEW" << std::endl;
-		return -1;
-	}
-
+void createPlane() {
 	float planeVertices[] = {
         // positions            // normals         // texcoords
          25.0f, -0.5f,  25.0f,  0.0f, 1.0f, 0.0f,  1.0f,  0.0f,
@@ -369,6 +352,28 @@ int main()
     glEnableVertexAttribArray(2);
     glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
     glBindVertexArray(0);
+	
+}
+
+// The MAIN function, from here we start the application and run the game loop
+int main()
+{
+	if (init() != 0)
+		return EXIT_FAILURE;
+	// Set the required callback functions
+	glfwSetKeyCallback(window, key_callback);
+	glfwSetMouseButtonCallback(window, mouse_button_callback);
+
+	// Set this to true so GLEW knows to use a modern approach to retrieving function pointers and extensions
+	glewExperimental = GL_TRUE;
+	// Initialize GLEW to setup the OpenGL Function pointers
+	if (glewInit() != GLEW_OK)
+	{
+		std::cout << "Failed to initialize GLEW" << std::endl;
+		return -1;
+	}
+
+	createPlane();
 
 	// Build and compile our shader programs
 
@@ -421,7 +426,7 @@ int main()
 	shader.setFloat(0.25f, "ambientCoefficient");
 	shader.setFloat(0.75f, "diffuseCoefficient");
 	shader.setFloat(1.0f, "specularCoefficient");
-	shader.setVec3(glm::vec3(0.902f, 0.894f, 0.847f), "objectColor");
+	shader.setVec3(glm::vec3(1.0f, 1.0f, 1.0f), "objectColor");
 
 	// Passing the various light for part A
 	for(int i = 0; i < lightsPartA.size(); i++) {
@@ -469,6 +474,7 @@ int main()
 
 	unsigned int marbleTexture = loadTexture("./textures/marble.jpg");
 
+	// Activate the texture each sahder will use
 	shadowShader.use();
 	shadowShader.setInt(0, "diffuseTexture");
 	shadowShader.setInt(1, "shadowMap");
@@ -488,18 +494,26 @@ int main()
 		
 		if(isPartB){
 			float near_plane = 1.0f;
-			float far_plane = 1000.0f;
+			float far_plane = 40.0f;
 			float SHADOW_HEIGHT = 1024;
 			float SHADOW_WIDTH = 1024;
+			
+			
 			// Configure camera from light source location
-			glm::mat4 lightProjection = glm::perspective(glm::radians(45.0f), (float)SHADOW_HEIGHT/ (float)SHADOW_WIDTH, near_plane, far_plane);
-			//glm::mat4 lightProjection = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, 1.0f, 7.5f);
-			glm::mat4 lightView = glm::lookAt(glm::vec3(0.0, 20.0, 10.0), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+			glm::mat4 lightProjection = glm::perspective(glm::radians(65.0f), (float)SHADOW_HEIGHT/ (float)SHADOW_WIDTH, near_plane, far_plane);
+			glm::vec3 lightFront = glm::normalize(glm::vec3(0, 20, 10) - glm::vec3(0,0,0));
+			glm::vec3 rightLight = glm::cross(glm::vec3(0,1,0), lightFront);
+			glm::vec3 upLight = glm::cross(glm::normalize(rightLight), lightFront);
+			glm::mat4 lightView = glm::lookAt(glm::vec3(0.0, 20.0, 10.0), glm::vec3(0.0f), upLight);
 			glm::mat4 lightMatrix = lightProjection * lightView;
+			
+			cout << glm::length(glm::vec3(0,0,0) - glm::vec3(0, 20, 10)) << endl;
+			
+			
+			
 			// First Pass
 			glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
 			depthShader.use();
-			// Passing light for part B
 			depthShader.setMat4(lightMatrix, "lightSpaceMatrix");
 			glBindFramebuffer(GL_FRAMEBUFFER, shadowMapFBO);
     		glClear(GL_DEPTH_BUFFER_BIT);
@@ -508,6 +522,7 @@ int main()
 			renderScene(depthShader, VAO, indices.size());
 			glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
+			// Needed to multiply by 2 for the retina display of a MacbookPro
 			glViewport(0, 0, WIDTH*2, HEIGHT*2);
 			glClear(GL_DEPTH_BUFFER_BIT|GL_COLOR_BUFFER_BIT);
 
