@@ -12,14 +12,15 @@
 #include <glm/gtc/type_ptr.hpp>
 #include "Camera.h"
 #include "Light.h"
+#include "Shader.h"
 #include "OBJloader.h"  //include the object loadr
-#include "shaderloader.h"
 #define STB_IMAGE_IMPLEMENTATION
 #include "stbi_image.h"
 using namespace std;
 
 // Window dimensions
 const GLuint WIDTH = 800, HEIGHT = 800;
+GLuint currentWidth = WIDTH, currentHeight = HEIGHT;
 GLFWwindow *window;
 
 Camera camera = Camera();
@@ -37,7 +38,7 @@ vector<Light> lightsPartA = {
 //Struct that contains all variables and behaviors related to the object
 struct {
 	glm::vec3 position = glm::vec3(0.0f, 0.0f, 0.0f); /*!< Position of the object */
-	glm::vec3 scale = glm::vec3(1.0f, 1.0f, 1.0f); /*!< Current scale of the object */
+	glm::vec3 scale = glm::vec3(0.25f, 0.25f, 0.25f); /*!< Current scale of the object */
 	float pitch = 0.0f; /*!< Current pitch of the object */
 	float yaw = 0.0f; /*!< Current yuw of the object */
 	float roll = 0.0f; /*!< Current roll of the object */
@@ -192,7 +193,7 @@ int init() {
 	glfwWindowHint(GLFW_RESIZABLE, GL_FALSE);
 
 	//WINDOW
-	window = glfwCreateWindow(WIDTH, HEIGHT, "Assignment 2", nullptr, nullptr);
+	window = glfwCreateWindow(WIDTH, HEIGHT, "Assignment 3", nullptr, nullptr);
 
 	if (nullptr == window)
 	{
@@ -218,12 +219,13 @@ int init() {
 	return 0;
 }
 
-void renderScene(GLuint activeShader, GLuint activeVAO, int numberOfEdges) {
+void renderScene(Shader activeShader, GLuint activeVAO, int numberOfEdges) {
 	// floor
     glm::mat4 model = glm::mat4(1.0f);
-    glUniformMatrix4fv(glGetUniformLocation(activeShader, "model"), 1, GL_FALSE, glm::value_ptr(model));
+	activeShader.setMat4(model, "model");
     glBindVertexArray(planeVAO);
     glDrawArrays(GL_TRIANGLES, 0, 6);
+	glBindVertexArray(0);
 	
 	//Building a perspective view
  	model = glm::mat4(1.0f);
@@ -243,13 +245,13 @@ void renderScene(GLuint activeShader, GLuint activeVAO, int numberOfEdges) {
 	projection = glm::perspective(glm::radians(camera.getFov()), (float)WIDTH / (float)HEIGHT, 0.1f, 100.0f);
 
 	//Passing the ctm (camera transformation matrix) to the shaders
-	glUniformMatrix4fv(glGetUniformLocation(activeShader, "model"), 1, GL_FALSE, glm::value_ptr(model));
-	glUniformMatrix4fv(glGetUniformLocation(activeShader, "view"), 1, GL_FALSE, glm::value_ptr(view));
-	glUniformMatrix4fv(glGetUniformLocation(activeShader, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
-		
+	activeShader.setMat4(model, "model");
+	activeShader.setMat4(view, "view");
+	activeShader.setMat4(projection, "projection");
+
 	// Change lighting depending on the camera position
-	glUniform3fv(glGetUniformLocation(activeShader, "viewPosition"), 1, glm::value_ptr(camera.getPosition()));
-		
+	activeShader.setVec3(camera.getPosition(), "viewPosition");
+
 	glBindVertexArray(activeVAO);
 	glDrawElements(GL_TRIANGLES, numberOfEdges, GL_UNSIGNED_INT, 0);
 	glBindVertexArray(0);
@@ -294,6 +296,37 @@ unsigned int loadTexture(char const * path)
     return textureID;
 }
 
+// renderQuad() renders a 1x1 XY quad in NDC
+// -----------------------------------------
+unsigned int quadVAO = 0;
+unsigned int quadVBO;
+void renderQuad()
+{
+    if (quadVAO == 0)
+    {
+        float quadVertices[] = {
+            // positions        // texture Coords
+            -1.0f,  1.0f, 0.0f, 0.0f, 1.0f,
+            -1.0f, -1.0f, 0.0f, 0.0f, 0.0f,
+             1.0f,  1.0f, 0.0f, 1.0f, 1.0f,
+             1.0f, -1.0f, 0.0f, 1.0f, 0.0f,
+        };
+        // setup plane VAO
+        glGenVertexArrays(1, &quadVAO);
+        glGenBuffers(1, &quadVBO);
+        glBindVertexArray(quadVAO);
+        glBindBuffer(GL_ARRAY_BUFFER, quadVBO);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), &quadVertices, GL_STATIC_DRAW);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
+    }
+    glBindVertexArray(quadVAO);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    glBindVertexArray(0);
+}
+
 // The MAIN function, from here we start the application and run the game loop
 int main()
 {
@@ -314,13 +347,13 @@ int main()
 
 	float planeVertices[] = {
         // positions            // normals         // texcoords
-         25.0f, -0.5f,  25.0f,  0.0f, 1.0f, 0.0f,  25.0f,  0.0f,
+         25.0f, -0.5f,  25.0f,  0.0f, 1.0f, 0.0f,  1.0f,  0.0f,
         -25.0f, -0.5f,  25.0f,  0.0f, 1.0f, 0.0f,   0.0f,  0.0f,
-        -25.0f, -0.5f, -25.0f,  0.0f, 1.0f, 0.0f,   0.0f, 25.0f,
+        -25.0f, -0.5f, -25.0f,  0.0f, 1.0f, 0.0f,   0.0f, 1.0f,
 
-         25.0f, -0.5f,  25.0f,  0.0f, 1.0f, 0.0f,  25.0f,  0.0f,
-        -25.0f, -0.5f, -25.0f,  0.0f, 1.0f, 0.0f,   0.0f, 25.0f,
-         25.0f, -0.5f, -25.0f,  0.0f, 1.0f, 0.0f,  25.0f, 25.0f
+         25.0f, -0.5f,  25.0f,  0.0f, 1.0f, 0.0f,  1.0f,  0.0f,
+        -25.0f, -0.5f, -25.0f,  0.0f, 1.0f, 0.0f,   0.0f, 1.0f,
+         25.0f, -0.5f, -25.0f,  0.0f, 1.0f, 0.0f,  1.0f, 1.0f
     };
     // plane VAO
     unsigned int planeVBO;
@@ -337,11 +370,13 @@ int main()
     glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
     glBindVertexArray(0);
 
-	// Build and compile our shader program
-	// Vertex shader
+	// Build and compile our shader programs
 
-	GLuint shader = loadSHADER("./shaders/vertex.shader", "./shaders/fragment.shader");
-	glUseProgram(shader);
+	Shader shader = Shader("./shaders/vertex.shader", "./shaders/fragment.shader");
+	Shader shadowShader = Shader("./shaders/shadowVertex.shader", "./shaders/shadowFragment.shader");
+	Shader depthShader = Shader("./shaders/depthVertex.shader", "./shaders/depthFragment.shader");
+	Shader debugShader = Shader("./shaders/debugVertex.shader", "./shaders/debugFragment.shader");
+
 	std::vector<int> indices;
 	std::vector<glm::vec3> vertices;
 	std::vector<glm::vec3> normals;
@@ -381,47 +416,47 @@ int main()
 
 	glBindVertexArray(0);
 
+	shader.use();
 	// Passing the ambient, diffuse and specular coefficients
-	glUniform1f(glGetUniformLocation(shader, "ambientCoefficient"), 0.25f);
-	glUniform1f(glGetUniformLocation(shader, "diffuseCoefficient"), 0.75f);
-	glUniform1f(glGetUniformLocation(shader, "specularCoefficient"), 1.0f);
-	glUniform3fv(glGetUniformLocation(shader, "objectColor"), 1, glm::value_ptr(glm::vec3(1.0f, 1.0f, 1.0f)));
+	shader.setFloat(0.25f, "ambientCoefficient");
+	shader.setFloat(0.75f, "diffuseCoefficient");
+	shader.setFloat(1.0f, "specularCoefficient");
+	shader.setVec3(glm::vec3(0.902f, 0.894f, 0.847f), "objectColor");
 
 	// Passing the various light for part A
 	for(int i = 0; i < lightsPartA.size(); i++) {
-		glUniform3fv(glGetUniformLocation(shader, ("lightsPartA["  + to_string(i) + "].position").c_str()), 1, glm::value_ptr(lightsPartA[i].getPosition()));
-		glUniform3fv(glGetUniformLocation(shader, ("lightsPartA["  + to_string(i) + "].color").c_str()), 1, glm::value_ptr(lightsPartA[i].getColor()));
+		shader.setVec3(lightsPartA[i].getPosition(), ("lightsPartA["  + to_string(i) + "].position").c_str());
+		shader.setVec3(lightsPartA[i].getColor(), ("lightsPartA["  + to_string(i) + "].color").c_str());
 	}
 
-	GLuint shadowShader = loadSHADER("./shaders/shadowVertex.shader", "./shaders/shadowFragment.shader");
-	glUseProgram(shadowShader);
+	shadowShader.use();
 	// Passing light for part B
-    glUniform3fv(glGetUniformLocation(shadowShader, "lightPosition"), 1, glm::value_ptr(glm::vec3(0.0f, 20.0f, 10.0f)));
-    glUniform3fv(glGetUniformLocation(shadowShader, "lightColor"), 1, glm::value_ptr(glm::vec3(0.8f, 0.2f, 0.2f)));
-	cout << glGetUniformLocation(shadowShader, "lightColor") << endl;
-	cout << glGetUniformLocation(shader, "lightColor") << endl;
+	shadowShader.setVec3(glm::vec3(0.0f, 20.0f, 10.0f), "lightPosition");
+	shadowShader.setVec3(glm::vec3(0.8f, 0.2f, 0.2f), "lightColor");
 	// Passing the ambient, diffuse and specular coefficients
-	glUniform1f(glGetUniformLocation(shadowShader, "ambientCoefficient"), 0.25f);
-	glUniform1f(glGetUniformLocation(shadowShader, "diffuseCoefficient"), 0.75f);
-	glUniform1f(glGetUniformLocation(shadowShader, "specularCoefficient"), 1.0f);
+	shadowShader.setFloat(0.25f, "ambientCoefficient");
+	shadowShader.setFloat(0.75f, "diffuseCoefficient");
+	shadowShader.setFloat(1.0f, "specularCoefficient");
 
   	GLuint shadowMapFBO;
     glGenFramebuffers(1, &shadowMapFBO);
+	glBindFramebuffer(GL_FRAMEBUFFER, shadowMapFBO);
 
     GLuint shadowMapTex;
     glGenTextures(1, &shadowMapTex);
-    glBindTexture(GL_TEXTURE_2D, shadowMapTex);
+	glBindTexture(GL_TEXTURE_2D, shadowMapTex);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT,
              WIDTH, HEIGHT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-    glBindFramebuffer(GL_FRAMEBUFFER, shadowMapFBO);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, shadowMapTex, 0);
-    glDrawBuffer(GL_NONE);
-    glReadBuffer(GL_NONE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+	float borderColor[] = {1.0f, 0.0f, 0.0f, 0.0f};
+	glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
+	glBindFramebuffer(GL_FRAMEBUFFER, shadowMapFBO);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, shadowMapTex, 0);
+	glDrawBuffer(GL_NONE);
+	glReadBuffer(GL_NONE);
 
 	GLenum Status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
 
@@ -431,10 +466,15 @@ int main()
 	}
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
-	glUseProgram(0);
-	GLuint depthShader = loadSHADER("./shaders/depthVertex.shader", "./shaders/depthFragment.shader");
 
 	unsigned int marbleTexture = loadTexture("./textures/marble.jpg");
+
+	shadowShader.use();
+	shadowShader.setInt(0, "diffuseTexture");
+	shadowShader.setInt(1, "shadowMap");
+	debugShader.use();
+	debugShader.setInt(0, "depthMap");
+
 	// Game loop
 	while (!glfwWindowShouldClose(window))
 	{
@@ -443,39 +483,55 @@ int main()
 
 		// Render
 		// Clear the colorbuffer and depth buffer
-		glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+		glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
 		glClear(GL_DEPTH_BUFFER_BIT|GL_COLOR_BUFFER_BIT);
 		
 		if(isPartB){
+			float near_plane = 1.0f;
+			float far_plane = 1000.0f;
+			float SHADOW_HEIGHT = 1024;
+			float SHADOW_WIDTH = 1024;
 			// Configure camera from light source location
-			glm::mat4 lightProjection = glm::perspective(glm::radians(45.0f), (float)WIDTH/ (float)HEIGHT, 1.0f, 20.0f);
+			glm::mat4 lightProjection = glm::perspective(glm::radians(45.0f), (float)SHADOW_HEIGHT/ (float)SHADOW_WIDTH, near_plane, far_plane);
 			//glm::mat4 lightProjection = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, 1.0f, 7.5f);
-			glm::mat4 lightView = glm::lookAt(glm::vec3(0.0, 20.0, 10.0), glm::vec3(0,0,0), glm::vec3(0.0f, 1.0f, 0.0f));
+			glm::mat4 lightView = glm::lookAt(glm::vec3(0.0, 20.0, 10.0), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 			glm::mat4 lightMatrix = lightProjection * lightView;
 			// First Pass
-			glUseProgram(depthShader);
+			glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
+			depthShader.use();
 			// Passing light for part B
-			//glUniform1f(glGetUniformLocation(depthShader, "near_plane"), 1.0f);
-			//glUniform1f(glGetUniformLocation(depthShader, "far_plane"), 20.0f);
-			glUniformMatrix4fv(glGetUniformLocation(depthShader, "lightSpaceMatrix"), 1, GL_FALSE, glm::value_ptr(lightMatrix));
-			glBindFramebuffer(GL_DRAW_FRAMEBUFFER, shadowMapFBO);
+			depthShader.setMat4(lightMatrix, "lightSpaceMatrix");
+			glBindFramebuffer(GL_FRAMEBUFFER, shadowMapFBO);
     		glClear(GL_DEPTH_BUFFER_BIT);
 			glActiveTexture(GL_TEXTURE0);
 			glBindTexture(GL_TEXTURE_2D, marbleTexture);
 			renderScene(depthShader, VAO, indices.size());
 			glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+			glViewport(0, 0, WIDTH*2, HEIGHT*2);
+			glClear(GL_DEPTH_BUFFER_BIT|GL_COLOR_BUFFER_BIT);
+
 			// Second Pass
 			glClear(GL_DEPTH_BUFFER_BIT|GL_COLOR_BUFFER_BIT);
-			glUseProgram(shadowShader);
-			glUniformMatrix4fv(glGetUniformLocation(shadowShader, "lightSpaceMatrix"), 1, GL_FALSE, glm::value_ptr(lightMatrix));
+			shadowShader.use();
+			shadowShader.setMat4(lightMatrix, "lightSpaceMatrix");
 			glActiveTexture(GL_TEXTURE0);
 			glBindTexture(GL_TEXTURE_2D, marbleTexture);
 			glActiveTexture(GL_TEXTURE1);
 			glBindTexture(GL_TEXTURE_2D, shadowMapTex);
 			renderScene(shadowShader, VAO, indices.size());
 			glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+			// render Depth map to quad for visual debugging
+			// ---------------------------------------------
+			debugShader.use();
+			debugShader.setFloat(near_plane, "near_plane");
+			debugShader.setFloat(far_plane, "far_plane");
+			glActiveTexture(GL_TEXTURE0);
+			glBindTexture(GL_TEXTURE_2D, shadowMapTex);
+			//renderQuad();
 		} else {
-			glUseProgram(shader);
+			shader.use();
 			renderScene(shader, VAO, indices.size());
 		}
 

@@ -10,5 +10,5 @@ out vec2 texCoord;
 void main()
 {
     gl_Position = lightSpaceMatrix * model * vec4(position, 1.0);
-    texCoord = texCoords;
+    //texCoord = texCoords;
 }

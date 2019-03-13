@@ -12,7 +12,7 @@ out vec4 fragmentPositionLightSpace;
 uniform mat4 projection;
 uniform mat4 model;
 uniform mat4 view;
-uniform mat4 lightMatrix;
+uniform mat4 lightSpaceMatrix;
 
 void main() {
     // Calculate the normal
@@ -22,7 +22,7 @@ void main() {
     
     fragmentPosition = vec3(model * vec4(position, 1.0f));
     
-    fragmentPositionLightSpace = lightMatrix * model * vec4(fragmentPosition, 1.0f);
+    fragmentPositionLightSpace = lightSpaceMatrix * vec4(fragmentPosition, 1.0f);
 
     gl_Position = projection * view * model * vec4(position, 1.0f);
 }
