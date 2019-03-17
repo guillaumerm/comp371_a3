@@ -9,6 +9,7 @@
 
 class Shader{
     public:
+        
         Shader(const char * vertex_file_path, const char * fragment_file_path);
         void use();
         void setMat4(glm::mat4 matrix, const char *locationName);

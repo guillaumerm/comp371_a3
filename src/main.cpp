@@ -20,7 +20,6 @@ using namespace std;
 
 // Window dimensions
 const GLuint WIDTH = 800, HEIGHT = 800;
-GLuint currentWidth = WIDTH, currentHeight = HEIGHT;
 GLFWwindow *window;
 
 Camera camera = Camera();
@@ -32,6 +31,18 @@ vector<Light> lightsPartA = {
 	Light(glm::vec3(0.05f, 0.2f, 0.05f), glm::vec3(-10.0f, -15.0f, 5.0f)),
 	Light(glm::vec3(0.05f, 0.05f, 0.2f), glm::vec3(0.0f, 15.0f, 5.0f)),
 	Light(glm::vec3(0.05f, 0.05f, 0.05f), glm::vec3(0.0f, 0.0f, 25.0f))
+};
+
+//taken from learnopengl.com
+float planeVertices[] = {
+    // positions            // normals         // texcoords
+     25.0f, -0.5f,  25.0f,  0.0f, 1.0f, 0.0f,  1.0f,  0.0f,
+    -25.0f, -0.5f,  25.0f,  0.0f, 1.0f, 0.0f,   0.0f,  0.0f,
+    -25.0f, -0.5f, -25.0f,  0.0f, 1.0f, 0.0f,   0.0f, 1.0f,
+
+     25.0f, -0.5f,  25.0f,  0.0f, 1.0f, 0.0f,  1.0f,  0.0f,
+    -25.0f, -0.5f, -25.0f,  0.0f, 1.0f, 0.0f,   0.0f, 1.0f,
+     25.0f, -0.5f, -25.0f,  0.0f, 1.0f, 0.0f,  1.0f, 1.0f
 };
 
 // 
@@ -177,11 +188,6 @@ static void key_callback(GLFWwindow* window, int key, int scancode, int action, 
 	}
 }
 
-// Taken from https://learnopengl.com/ (https://learnopengl.com/code_viewer_gh.php?code=src/1.getting_started/6.3.coordinate_systems_multiple/coordinate_systems_multiple.cpp) Not really used in this assignment.
-void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
-	glViewport(0, 0, width, height);
-}
-
 int init() {
 	std::cout << "Starting GLFW context, OpenGL 3.3" << std::endl;
 	glfwInit();
@@ -203,7 +209,6 @@ int init() {
 	}
 
 	glfwMakeContextCurrent(window);
-	glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 
 	//Define the depth buffer and enable it
 	glEnable(GL_DEPTH_TEST);
@@ -233,15 +238,12 @@ void renderScene(Shader activeShader, GLuint activeVAO, int numberOfEdges) {
 	glm::mat4 projection = glm::mat4(1.0f);
 
 	// Constructing the ctm (camera transformation matrix)
-		
-	model = glm::scale(model, object.scale);
-	// Construct the model_rotation matrix
-	glm::mat4 model_rotation = glm::rotate(glm::mat4(1.0f), glm::radians(object.roll), glm::vec3(0,0,1))*glm::rotate(glm::mat4(1.0f), glm::radians(object.yaw), glm::vec3(0, 1, 0))* glm::rotate(glm::mat4(1.0f), glm::radians(object.pitch), glm::vec3(1,0,0));
-	model *= model_rotation;
 	model = glm::translate(model, object.position);
+	model = glm::rotate(model, glm::radians(object.roll), glm::vec3(0,0,1))*glm::rotate(glm::mat4(1.0f), glm::radians(object.yaw), glm::vec3(0, 1, 0))* glm::rotate(glm::mat4(1.0f), glm::radians(object.pitch), glm::vec3(1,0,0));
+	model = glm::scale(model, object.scale);
 
+	// Create view and projection matrix
 	view = glm::lookAt(camera.getPosition(), camera.getFront() + camera.getPosition(), camera.getUp());
-
 	projection = glm::perspective(glm::radians(camera.getFov()), (float)WIDTH / (float)HEIGHT, 0.1f, 100.0f);
 
 	//Passing the ctm (camera transformation matrix) to the shaders
@@ -259,6 +261,7 @@ void renderScene(Shader activeShader, GLuint activeVAO, int numberOfEdges) {
 
 // utility function for loading a 2D texture from file
 // ---------------------------------------------------
+// taken from learnopengl.com
 unsigned int loadTexture(char const * path)
 {
     unsigned int textureID;
@@ -296,50 +299,9 @@ unsigned int loadTexture(char const * path)
     return textureID;
 }
 
-// renderQuad() renders a 1x1 XY quad in NDC
-// -----------------------------------------
-unsigned int quadVAO = 0;
-unsigned int quadVBO;
-void renderQuad()
-{
-    if (quadVAO == 0)
-    {
-        float quadVertices[] = {
-            // positions        // texture Coords
-            -1.0f,  1.0f, 0.0f, 0.0f, 1.0f,
-            -1.0f, -1.0f, 0.0f, 0.0f, 0.0f,
-             1.0f,  1.0f, 0.0f, 1.0f, 1.0f,
-             1.0f, -1.0f, 0.0f, 1.0f, 0.0f,
-        };
-        // setup plane VAO
-        glGenVertexArrays(1, &quadVAO);
-        glGenBuffers(1, &quadVBO);
-        glBindVertexArray(quadVAO);
-        glBindBuffer(GL_ARRAY_BUFFER, quadVBO);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), &quadVertices, GL_STATIC_DRAW);
-        glEnableVertexAttribArray(0);
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
-        glEnableVertexAttribArray(1);
-        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
-    }
-    glBindVertexArray(quadVAO);
-    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-    glBindVertexArray(0);
-}
-
 void createPlane() {
-	float planeVertices[] = {
-        // positions            // normals         // texcoords
-         25.0f, -0.5f,  25.0f,  0.0f, 1.0f, 0.0f,  1.0f,  0.0f,
-        -25.0f, -0.5f,  25.0f,  0.0f, 1.0f, 0.0f,   0.0f,  0.0f,
-        -25.0f, -0.5f, -25.0f,  0.0f, 1.0f, 0.0f,   0.0f, 1.0f,
-
-         25.0f, -0.5f,  25.0f,  0.0f, 1.0f, 0.0f,  1.0f,  0.0f,
-        -25.0f, -0.5f, -25.0f,  0.0f, 1.0f, 0.0f,   0.0f, 1.0f,
-         25.0f, -0.5f, -25.0f,  0.0f, 1.0f, 0.0f,  1.0f, 1.0f
-    };
-    // plane VAO
-    unsigned int planeVBO;
+	// taken from learnopengl.com
+    GLuint planeVBO;
     glGenVertexArrays(1, &planeVAO);
     glGenBuffers(1, &planeVBO);
     glBindVertexArray(planeVAO);
@@ -380,7 +342,6 @@ int main()
 	Shader shader = Shader("./shaders/vertex.shader", "./shaders/fragment.shader");
 	Shader shadowShader = Shader("./shaders/shadowVertex.shader", "./shaders/shadowFragment.shader");
 	Shader depthShader = Shader("./shaders/depthVertex.shader", "./shaders/depthFragment.shader");
-	Shader debugShader = Shader("./shaders/debugVertex.shader", "./shaders/debugFragment.shader");
 
 	std::vector<int> indices;
 	std::vector<glm::vec3> vertices;
@@ -443,10 +404,12 @@ int main()
 	shadowShader.setFloat(0.75f, "diffuseCoefficient");
 	shadowShader.setFloat(1.0f, "specularCoefficient");
 
+	// Prepare the framebuffer object to create shadow
   	GLuint shadowMapFBO;
     glGenFramebuffers(1, &shadowMapFBO);
 	glBindFramebuffer(GL_FRAMEBUFFER, shadowMapFBO);
 
+	// Prepare the shadow textrue
     GLuint shadowMapTex;
     glGenTextures(1, &shadowMapTex);
 	glBindTexture(GL_TEXTURE_2D, shadowMapTex);
@@ -472,14 +435,12 @@ int main()
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-	unsigned int marbleTexture = loadTexture("./textures/marble.jpg");
+	GLuint marbleTexture = loadTexture("./textures/marble.jpg");
 
-	// Activate the texture each sahder will use
+	// Activate the texture each shader will use
 	shadowShader.use();
 	shadowShader.setInt(0, "diffuseTexture");
 	shadowShader.setInt(1, "shadowMap");
-	debugShader.use();
-	debugShader.setInt(0, "depthMap");
 
 	// Game loop
 	while (!glfwWindowShouldClose(window))
@@ -507,10 +468,6 @@ int main()
 			glm::mat4 lightView = glm::lookAt(glm::vec3(0.0, 20.0, 10.0), glm::vec3(0.0f), upLight);
 			glm::mat4 lightMatrix = lightProjection * lightView;
 			
-			cout << glm::length(glm::vec3(0,0,0) - glm::vec3(0, 20, 10)) << endl;
-			
-			
-			
 			// First Pass
 			glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
 			depthShader.use();
@@ -523,7 +480,8 @@ int main()
 			glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
 			// Needed to multiply by 2 for the retina display of a MacbookPro
-			glViewport(0, 0, WIDTH*2, HEIGHT*2);
+			//glViewport(0, 0, WIDTH*2, HEIGHT*2);
+			glViewport(0, 0, WIDTH, HEIGHT);
 			glClear(GL_DEPTH_BUFFER_BIT|GL_COLOR_BUFFER_BIT);
 
 			// Second Pass
@@ -536,15 +494,6 @@ int main()
 			glBindTexture(GL_TEXTURE_2D, shadowMapTex);
 			renderScene(shadowShader, VAO, indices.size());
 			glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-			// render Depth map to quad for visual debugging
-			// ---------------------------------------------
-			debugShader.use();
-			debugShader.setFloat(near_plane, "near_plane");
-			debugShader.setFloat(far_plane, "far_plane");
-			glActiveTexture(GL_TEXTURE0);
-			glBindTexture(GL_TEXTURE_2D, shadowMapTex);
-			//renderQuad();
 		} else {
 			shader.use();
 			renderScene(shader, VAO, indices.size());
